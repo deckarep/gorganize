@@ -6,16 +6,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/deckarep/golang-set"
+	"github.com/sirupsen/logrus"
 )
 
 var (
-	logFile         = flag.String("log", "gorganize.log", "location of log file, default is working directory")
 	sourceFolderPtr = flag.String("source", "/Users/deckarep/Desktop/test-folder/", "starting source folder")
 	destFolderPtr   = flag.String("dest", "/Users/deckarep/Desktop/dest-folder/", "destination source folder")
 )
@@ -39,7 +38,7 @@ func init() {
 
 func main() {
 	// 0.) Init log file
-	setupLogFile(*logFile)
+	setupLogFile()
 
 	// 1.) Ensure the destination directory exists.
 	createDirIfNotExists(*destFolderPtr)
@@ -58,7 +57,7 @@ func main() {
 
 						err := copyFile(sourceFile, destFile)
 						if err != nil {
-							log.Fatalf("Failed to copy file: %s to dest %s with err: %s", sourceFile, destFile, err.Error())
+							logrus.Fatalf("Failed to copy file: %s to dest %s with err: %s", sourceFile, destFile, err.Error())
 						}
 
 					}
@@ -69,27 +68,21 @@ func main() {
 		})
 
 	if err != nil {
-		log.Fatal("Couldn't walk the root folder with err: ", err.Error())
+		logrus.Fatal("Couldn't walk the root folder with err: ", err.Error())
 	}
 }
 
-func setupLogFile(path string) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("error opening log file: %v", err)
-	}
-	defer f.Close()
-
-	log.SetOutput(f)
-	log.Printf("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
-	log.Println("Hi")
+func setupLogFile() {
+	logrus.SetFormatter(&logrus.TextFormatter{})
+	logrus.SetOutput(os.Stdout)
+	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
 }
 
 func createDirIfNotExists(path string) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.MkdirAll(path, 0777)
 		if err != nil {
-			log.Fatal("Couldn't create dir with err: ", err)
+			logrus.Fatal("Couldn't create dir with err: ", err)
 		}
 	}
 }
@@ -111,11 +104,11 @@ func copyFile(src, dst string) error {
 	destHash := md5Sum(dst)
 
 	if sourceHash != destHash {
-		fmt.Printf("Similar file found:%s, diff hash:%s\n", dst, destHash)
+		logrus.Printf("Similar file found:%s, diff hash:%s", dst, destHash)
 		name, ext := filenameAndExt(dst)
 		writeDestFile(in, src, fmt.Sprintf("%s-%s%s", name, destHash[0:5], ext))
 	} else {
-		fmt.Printf("Exact match found:%s, skipping...\n", filepath.Base(dst))
+		logrus.Printf("Exact match found:%s, skipping...", filepath.Base(dst))
 	}
 
 	return nil
@@ -138,20 +131,21 @@ func writeDestFile(srcReader io.Reader, src, dst string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Copied file: %s -> %s\n", src, dst)
+
+	logrus.Printf("Copied file: %s -> %s", src, dst)
 	return nil
 }
 
 func md5Sum(file string) string {
 	existFile, err := os.Open(file)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 	defer existFile.Close()
 
 	h := md5.New()
 	if _, err := io.Copy(h, existFile); err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -161,23 +155,22 @@ func uncompress(folder string) {
 	// Open a zip archive for reading.
 	r, err := zip.OpenReader(folder)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 	defer r.Close()
 
 	// Iterate through the files in the archive,
 	// printing some of their contents.
 	for _, f := range r.File {
-		fmt.Printf("Contents of %s:\n", f.Name)
+		logrus.Printf("Contents of %s:\n", f.Name)
 		rc, err := f.Open()
 		if err != nil {
-			log.Fatal(err)
+			logrus.Fatal(err)
 		}
 		_, err = io.CopyN(os.Stdout, rc, 68)
 		if err != nil {
-			log.Fatal(err)
+			logrus.Fatal(err)
 		}
 		rc.Close()
-		fmt.Println()
 	}
 }
