@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/deckarep/golang-set"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -48,7 +49,7 @@ func main() {
 		*sourceFolderPtr,
 		func(path string, info os.FileInfo, err error) error {
 			if !info.IsDir() {
-				imageSet.Each(func(item interface{}) bool {
+				allSet.Each(func(item interface{}) bool {
 					ext := item.(string)
 					pathLowerCase := strings.ToLower(path)
 					if strings.ToLower(filepath.Ext(pathLowerCase)) == ext {
@@ -57,9 +58,8 @@ func main() {
 
 						err := copyFile(sourceFile, destFile)
 						if err != nil {
-							logrus.Fatalf("Failed to copy file: %s to dest %s with err: %s", sourceFile, destFile, err.Error())
+							logrus.Errorf("Failed to copy file: %s to dest %s with err: %s", sourceFile, destFile, err.Error())
 						}
-
 					}
 					return false
 				})
@@ -78,6 +78,7 @@ func setupLogFile() {
 	})
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
+	logrus.Info("Looking for the following files: ", allSet.String())
 }
 
 func createDirIfNotExists(path string) {
@@ -94,7 +95,7 @@ func createDirIfNotExists(path string) {
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "couldn't open src file during copyFile")
 	}
 	defer in.Close()
 
@@ -102,8 +103,14 @@ func copyFile(src, dst string) error {
 		return writeDestFile(in, src, dst)
 	}
 
-	sourceHash := md5Sum(src)
-	destHash := md5Sum(dst)
+	sourceHash, err := md5Sum(src)
+	if err != nil {
+		return errors.Wrap(err, "couldn't md5sum sourceHash")
+	}
+	destHash, err := md5Sum(dst)
+	if err != nil {
+		return errors.Wrap(err, "couldn't md5Sum destHash")
+	}
 
 	if sourceHash != destHash {
 		logrus.Printf("Similar file found:%s, diff hash:%s", dst, destHash)
@@ -138,19 +145,19 @@ func writeDestFile(srcReader io.Reader, src, dst string) error {
 	return nil
 }
 
-func md5Sum(file string) string {
+func md5Sum(file string) (string, error) {
 	existFile, err := os.Open(file)
 	if err != nil {
-		logrus.Fatal(err)
+		return "", errors.Wrap(err, "md5Sum couldn't open file")
 	}
 	defer existFile.Close()
 
 	h := md5.New()
 	if _, err := io.Copy(h, existFile); err != nil {
-		logrus.Fatal(err)
+		return "", errors.Wrap(err, "md5Sum couldn't io.Copy file")
 	}
 
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 func uncompress(folder string) {
