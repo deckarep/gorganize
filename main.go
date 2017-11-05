@@ -164,6 +164,14 @@ func copyFile(src, dst string) error {
 
 	wg.Wait()
 
+	if sourceHashError != nil {
+		return sourceHashError
+	}
+
+	if destHashError != nil {
+		return destHashError
+	}
+
 	if sourceHash != destHash {
 		logrus.Printf("Similar file found:%s, diff hash:%s", dst, destHash)
 		name, ext := filenameAndExt(dst)
