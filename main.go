@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	logFile         = flag.String("log", "gorganize.log", "location of log file, default is working directory")
 	sourceFolderPtr = flag.String("source", "/Users/deckarep/Desktop/test-folder/", "starting source folder")
 	destFolderPtr   = flag.String("dest", "/Users/deckarep/Desktop/dest-folder/", "destination source folder")
 )
@@ -37,6 +38,8 @@ func init() {
 }
 
 func main() {
+	// 0.) Init log file
+	setupLogFile(*logFile)
 
 	// 1.) Ensure the destination directory exists.
 	createDirIfNotExists(*destFolderPtr)
@@ -70,6 +73,18 @@ func main() {
 	}
 }
 
+func setupLogFile(path string) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening log file: %v", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
+	log.Printf("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
+	log.Println("Hi")
+}
+
 func createDirIfNotExists(path string) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.MkdirAll(path, 0777)
@@ -96,7 +111,7 @@ func copyFile(src, dst string) error {
 	destHash := md5Sum(dst)
 
 	if sourceHash != destHash {
-		fmt.Printf("Similar file found:%s, diff hash:%s\n", filepath.Base(dst), destHash)
+		fmt.Printf("Similar file found:%s, diff hash:%s\n", dst, destHash)
 		name, ext := filenameAndExt(dst)
 		writeDestFile(in, src, fmt.Sprintf("%s-%s%s", name, destHash[0:5], ext))
 	} else {
