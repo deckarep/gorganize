@@ -73,7 +73,9 @@ func main() {
 }
 
 func setupLogFile() {
-	logrus.SetFormatter(&logrus.TextFormatter{})
+	logrus.SetFormatter(&logrus.TextFormatter{
+		ForceColors: true,
+	})
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
 }
