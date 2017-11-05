@@ -9,11 +9,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/deckarep/golang-set"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+/*
+Rules:
+ - Flatten source folder to destination with by file(s), by certain file(s).
+ - Uncompress target file(s), Uncompress directory of archives recursively.
+ - Generate md5 of folder recursively.
+*/
 
 var (
 	sourceFolderPtr = flag.String("source", "/Users/deckarep/Desktop/test-folder/", "starting source folder")
@@ -45,13 +53,22 @@ func main() {
 	createDirIfNotExists(*destFolderPtr)
 
 	// 2.) Uncompress zip files.
-	unzip_all()
+	unzipAll()
 
 	// 3.) Flatten files targeted by extension.
-	flatten_assets()
+	flattenAssets()
 }
 
-func unzip_all() {
+func setupLogFile() {
+	logrus.SetFormatter(&logrus.TextFormatter{
+		ForceColors: true,
+	})
+	logrus.SetOutput(os.Stdout)
+	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
+	logrus.Info("Looking for the following files: ", allSet.String())
+}
+
+func unzipAll() {
 	err := filepath.Walk(*sourceFolderPtr, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -67,7 +84,7 @@ func unzip_all() {
 	}
 }
 
-func flatten_assets() {
+func flattenAssets() {
 	// 2.) Begin walking filesystem.
 	err := filepath.Walk(
 		filepath.Join(*sourceFolderPtr, "C"),
@@ -96,15 +113,6 @@ func flatten_assets() {
 	}
 }
 
-func setupLogFile() {
-	logrus.SetFormatter(&logrus.TextFormatter{
-		ForceColors: true,
-	})
-	logrus.SetOutput(os.Stdout)
-	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
-	logrus.Info("Looking for the following files: ", allSet.String())
-}
-
 func createDirIfNotExists(path string) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.MkdirAll(path, 0777)
@@ -127,22 +135,42 @@ func copyFile(src, dst string) error {
 		return writeDestFile(in, src, dst)
 	}
 
-	sourceHash, err := md5Sum(src)
-	if err != nil {
-		return errors.Wrap(err, "couldn't md5sum sourceHash")
-	}
-	destHash, err := md5Sum(dst)
-	if err != nil {
-		return errors.Wrap(err, "couldn't md5Sum destHash")
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var sourceHash string
+	var sourceHashError error
+
+	go func() {
+		defer wg.Done()
+		hash, md5SumError := md5Sum(src)
+		if err != nil {
+			sourceHashError = errors.Wrap(md5SumError, "couldn't md5sum sourceHash")
+		}
+		sourceHash = hash
+	}()
+
+	var destHash string
+	var destHashError error
+
+	go func() {
+		defer wg.Done()
+		hash, md5SumError := md5Sum(dst)
+		if err != nil {
+			destHashError = errors.Wrap(md5SumError, "couldn't md5Sum destHash")
+		}
+		destHash = hash
+	}()
+
+	wg.Wait()
 
 	if sourceHash != destHash {
 		logrus.Printf("Similar file found:%s, diff hash:%s", dst, destHash)
 		name, ext := filenameAndExt(dst)
-		writeDestFile(in, src, fmt.Sprintf("%s-%s%s", name, destHash[0:5], ext))
-	} else {
-		logrus.Printf("Exact match found:%s, skipping...", filepath.Base(dst))
+		return writeDestFile(in, src, fmt.Sprintf("%s-%s%s", name, destHash[0:5], ext))
 	}
+
+	logrus.Printf("Exact match found:%s, skipping...", filepath.Base(dst))
 
 	return nil
 }
