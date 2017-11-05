@@ -4,8 +4,8 @@
 [[projects]]
   name = "github.com/deckarep/golang-set"
   packages = ["."]
-  revision = "fc8930a5e645572ee00bf66358ed3414f3c13b90"
-  version = "v1.6"
+  revision = "1d4478f51bed434f1dadf96dcd9b43aabac66795"
+  version = "v1.7"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -34,6 +34,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "0fe3a48c987f5c11ea683b4f4009ee9a0fda0acca06f09aee3447502b489afdf"
+  inputs-digest = "c3f8d42617e509944e7d3d2604e07c66c94ed0b9d7f52cfb2baeead4bb66c42c"
   solver-name = "gps-cdcl"
   solver-version = 1
