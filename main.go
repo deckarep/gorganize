@@ -21,6 +21,7 @@ Rules:
  - Flatten source folder to destination with by file(s), by certain file(s).
  - Uncompress target file(s), Uncompress directory of archives recursively.
  - Generate md5 of folder recursively.
+ - TODO: Move behind Cobra, write tests, take more advantage of parallelism.
 */
 
 var (
@@ -75,12 +76,15 @@ func unzipAll() {
 		}
 
 		if filepath.Ext(path) == ".zip" {
-			return unzip(path, filepath.Join(*sourceFolderPtr, "C"))
+			err := unzip(path, filepath.Join(*sourceFolderPtr, "C"))
+			if err != nil {
+				logrus.Error(err.Error())
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		fmt.Printf("walk error [%v]\n", err)
+		logrus.Error("Error on filepath.Walk during unzipAll:", err.Error())
 	}
 }
 
@@ -220,18 +224,18 @@ func md5Sum(file string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-func unzip(archive, target string) error {
+func unzip(archive, dest string) error {
 	reader, err := zip.OpenReader(archive)
 	if err != nil {
 		return errors.Wrapf(err, "Failed to zip.OpenReader of archive: %s", archive)
 	}
 
-	if err := os.MkdirAll(target, 0777); err != nil {
-		return errors.Wrapf(err, "Failed to MkdirAll of target: %s", target)
+	if err := os.MkdirAll(dest, 0777); err != nil {
+		return errors.Wrapf(err, "Failed to MkdirAll of dest: %s", dest)
 	}
 
 	for _, file := range reader.File {
-		path := filepath.Join(target, file.Name)
+		path := filepath.Join(dest, file.Name)
 		if file.FileInfo().IsDir() {
 			os.MkdirAll(path, file.Mode())
 			continue
@@ -243,13 +247,13 @@ func unzip(archive, target string) error {
 		}
 		defer fileReader.Close()
 
-		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		destFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
 		if err != nil {
-			return errors.Wrap(err, "Failed to open target file during uncompress")
+			return errors.Wrap(err, "Failed to open dest file during uncompress")
 		}
-		defer targetFile.Close()
+		defer destFile.Close()
 
-		if _, err := io.Copy(targetFile, fileReader); err != nil {
+		if _, err := io.Copy(destFile, fileReader); err != nil {
 			return errors.Wrap(err, "Failed to io.Copy file during uncompress")
 		}
 	}
