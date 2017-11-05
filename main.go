@@ -44,9 +44,33 @@ func main() {
 	// 1.) Ensure the destination directory exists.
 	createDirIfNotExists(*destFolderPtr)
 
+	// 2.) Uncompress zip files.
+	unzip_all()
+
+	// 3.) Flatten files targeted by extension.
+	flatten_assets()
+}
+
+func unzip_all() {
+	err := filepath.Walk(*sourceFolderPtr, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+
+		if filepath.Ext(path) == ".zip" {
+			return unzip(path, filepath.Join(*sourceFolderPtr, "C"))
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("walk error [%v]\n", err)
+	}
+}
+
+func flatten_assets() {
 	// 2.) Begin walking filesystem.
 	err := filepath.Walk(
-		*sourceFolderPtr,
+		filepath.Join(*sourceFolderPtr, "C"),
 		func(path string, info os.FileInfo, err error) error {
 			if !info.IsDir() {
 				allSet.Each(func(item interface{}) bool {
@@ -85,7 +109,7 @@ func createDirIfNotExists(path string) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err := os.MkdirAll(path, 0777)
 		if err != nil {
-			logrus.Fatal("Couldn't create dir with err: ", err)
+			logrus.Fatalf("Couldn't create destination dir:%s with err: %s", path, err)
 		}
 	}
 }
@@ -160,26 +184,39 @@ func md5Sum(file string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-func uncompress(folder string) {
-	// Open a zip archive for reading.
-	r, err := zip.OpenReader(folder)
+func unzip(archive, target string) error {
+	reader, err := zip.OpenReader(archive)
 	if err != nil {
-		logrus.Fatal(err)
+		return errors.Wrapf(err, "Failed to zip.OpenReader of archive: %s", archive)
 	}
-	defer r.Close()
 
-	// Iterate through the files in the archive,
-	// printing some of their contents.
-	for _, f := range r.File {
-		logrus.Printf("Contents of %s:\n", f.Name)
-		rc, err := f.Open()
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		_, err = io.CopyN(os.Stdout, rc, 68)
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		rc.Close()
+	if err := os.MkdirAll(target, 0777); err != nil {
+		return errors.Wrapf(err, "Failed to MkdirAll of target: %s", target)
 	}
+
+	for _, file := range reader.File {
+		path := filepath.Join(target, file.Name)
+		if file.FileInfo().IsDir() {
+			os.MkdirAll(path, file.Mode())
+			continue
+		}
+
+		fileReader, err := file.Open()
+		if err != nil {
+			return errors.Wrap(err, "Failed to open source file during uncompress")
+		}
+		defer fileReader.Close()
+
+		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			return errors.Wrap(err, "Failed to open target file during uncompress")
+		}
+		defer targetFile.Close()
+
+		if _, err := io.Copy(targetFile, fileReader); err != nil {
+			return errors.Wrap(err, "Failed to io.Copy file during uncompress")
+		}
+	}
+
+	return nil
 }
