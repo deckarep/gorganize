@@ -22,22 +22,32 @@ SOFTWARE.
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/deckarep/golang-set"
+	"github.com/deckarep/gorganize/file_management/op"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
+var (
+//TODO: extensions flag
+)
+
 func init() {
-	RootCmd.AddCommand(opCmd)
+	RootCmd.AddCommand(flattenCmd)
 }
 
-var opCmd = &cobra.Command{
-	Use:   "op [file(s) ...]",
-	Short: "does operations against one or more files",
-	Long:  "op [file(s) ...] will calculate md5 operations against one or more files.",
+var flattenCmd = &cobra.Command{
+	Use:   "flatten [source folder] [dest folder]",
+	Short: "flatten copies a hierarchy of files based on an extension into a single folder.",
+	Long:  "TODO",
 	Run: func(cmd *cobra.Command, args []string) {
-		for _, file := range args {
-			fmt.Println(file)
+		if len(args) != 2 {
+			logrus.Fatal("flatten requires a [source folder] and [dest folder]")
 		}
+
+		op.FlattenFolderByExtension(args[0], args[1],
+			mapset.NewThreadUnsafeSetFromSlice([]interface{}{
+				".psd", ".pdf", ".png", ".gif", ".jpg", ".jpeg", ".tiff", ".nef", ".raw"}))
+
 	},
 }

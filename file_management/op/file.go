@@ -17,9 +17,12 @@ import (
 // FlattenFolderByExtension will take a source folder, find all files by the extensions
 // argument and flatten the found files into a single destination folder.
 func FlattenFolderByExtension(sourceFolder, destFolder string, extensions mapset.Set) {
+	// 1.) Ensure destination directory
+	createDirIfNotExists(destFolder)
+
 	// 2.) Begin walking filesystem.
 	err := filepath.Walk(
-		filepath.Join(sourceFolder, "C"),
+		sourceFolder,
 		func(path string, info os.FileInfo, err error) error {
 			if !info.IsDir() {
 				extensions.Each(func(item interface{}) bool {
