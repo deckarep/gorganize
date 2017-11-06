@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"crypto/md5"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/deckarep/golang-set"
+	cmd "github.com/deckarep/gorganize/cmd/gorganize"
+	md5 "github.com/deckarep/gorganize/md5"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -43,21 +44,24 @@ var (
 )
 
 func init() {
+	setupLogFile()
 	flag.Parse()
 }
 
 func main() {
-	// 0.) Init log file
-	setupLogFile()
+	if err := cmd.RootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
-	// 1.) Ensure the destination directory exists.
-	createDirIfNotExists(*destFolderPtr)
+	// // 1.) Ensure the destination directory exists.
+	// createDirIfNotExists(*destFolderPtr)
 
-	// 2.) Uncompress zip files.
-	unzipAll()
+	// // 2.) Uncompress zip files.
+	// unzipAll()
 
-	// 3.) Flatten files targeted by extension.
-	flattenAssets()
+	// // 3.) Flatten files targeted by extension.
+	// flattenAssets()
 }
 
 func setupLogFile() {
@@ -67,25 +71,6 @@ func setupLogFile() {
 	logrus.SetOutput(os.Stdout)
 	logrus.Infof("Starting goranize on source folder:%s, dest folder:%s", *sourceFolderPtr, *destFolderPtr)
 	logrus.Info("Looking for the following files: ", allSet.String())
-}
-
-func unzipAll() {
-	err := filepath.Walk(*sourceFolderPtr, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
-
-		if filepath.Ext(path) == ".zip" {
-			err := unzip(path, filepath.Join(*sourceFolderPtr, "C"))
-			if err != nil {
-				logrus.Error(err.Error())
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		logrus.Error("Error on filepath.Walk during unzipAll:", err.Error())
-	}
 }
 
 func flattenAssets() {
@@ -147,7 +132,7 @@ func copyFile(src, dst string) error {
 
 	go func() {
 		defer wg.Done()
-		hash, md5SumError := md5Sum(src)
+		hash, md5SumError := md5.Sum(src)
 		if err != nil {
 			sourceHashError = errors.Wrap(md5SumError, "couldn't md5sum sourceHash")
 		}
@@ -159,7 +144,7 @@ func copyFile(src, dst string) error {
 
 	go func() {
 		defer wg.Done()
-		hash, md5SumError := md5Sum(dst)
+		hash, md5SumError := md5.Sum(dst)
 		if err != nil {
 			destHashError = errors.Wrap(md5SumError, "couldn't md5Sum destHash")
 		}
@@ -206,57 +191,5 @@ func writeDestFile(srcReader io.Reader, src, dst string) error {
 	}
 
 	logrus.Printf("Copied file: %s -> %s", src, dst)
-	return nil
-}
-
-func md5Sum(file string) (string, error) {
-	existFile, err := os.Open(file)
-	if err != nil {
-		return "", errors.Wrap(err, "md5Sum couldn't open file")
-	}
-	defer existFile.Close()
-
-	h := md5.New()
-	if _, err := io.Copy(h, existFile); err != nil {
-		return "", errors.Wrap(err, "md5Sum couldn't io.Copy file")
-	}
-
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
-func unzip(archive, dest string) error {
-	reader, err := zip.OpenReader(archive)
-	if err != nil {
-		return errors.Wrapf(err, "Failed to zip.OpenReader of archive: %s", archive)
-	}
-
-	if err := os.MkdirAll(dest, 0777); err != nil {
-		return errors.Wrapf(err, "Failed to MkdirAll of dest: %s", dest)
-	}
-
-	for _, file := range reader.File {
-		path := filepath.Join(dest, file.Name)
-		if file.FileInfo().IsDir() {
-			os.MkdirAll(path, file.Mode())
-			continue
-		}
-
-		fileReader, err := file.Open()
-		if err != nil {
-			return errors.Wrap(err, "Failed to open source file during uncompress")
-		}
-		defer fileReader.Close()
-
-		destFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			return errors.Wrap(err, "Failed to open dest file during uncompress")
-		}
-		defer destFile.Close()
-
-		if _, err := io.Copy(destFile, fileReader); err != nil {
-			return errors.Wrap(err, "Failed to io.Copy file during uncompress")
-		}
-	}
-
 	return nil
 }
