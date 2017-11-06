@@ -65,4 +65,7 @@ clean:
 	-rm -f cmd/${BINARY}/${BINARY}
 	-rm -f cmd/${BINARY}/${BINARY}-*
 
-.PHONY: link linux darwin windows test vet fmt clean
+push:
+	git push origin master
+
+.PHONY: link linux darwin windows test vet fmt clean push
